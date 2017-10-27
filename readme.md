@@ -4,7 +4,7 @@
 - 针对肿瘤N-T配对样本的解决方案
 - 针对多个样本的解决方案
 
-## 单个样本的拷贝数变异检测
+## 单个样本如何做拷贝数变异分析呢
 
 在bioconductor上面看到一个R包 **seqCNA**：
 
@@ -62,10 +62,103 @@ GENOME='/home/jianmingzeng/reference/genome/human_g1k_v37/human_g1k_v37.fasta'
 bam='ESCC13-T1_recal.bam'
 samtools mpileup -f $GENOME $bam |\
 perl -alne '{$pos=int($F[1]/200000); $key="$F[0]\t$pos";$GC{$key}++ if $F[2]=~/[GC]/;$counts_sum{$key}+=$F[3];$number{$key}++;}END{print "$_\t$number{$_}\t$GC{$_}\t$counts_sum{$_}" foreach keys %number}' |\
-sort -k1,1 -n -k 2,2 >T1.windows
+sort -k1,1 -k 2,2n >T1.windows
 ```
 
 得到的结果如下：
+
+```
+head GC_stat.10k.txt
+chr1	1	7936	3885	582219
+chr1	2	2123	934	88167
+chr1	3	1969	169	28729
+chr1	4	3556	593	48724
+chr1	5	8828	2582	176627
+chr1	6	8229	2290	117675
+chr1	7	8794	438	156158
+chr1	8	10000	723	211816
+chr1	9	9077	2421	247285
+chr1	10	9415	1661	371830
+```
+
+前面两行是窗口的坐标，**第几号染色体的第几个窗口**，后面3行是数据，分别是每个窗口的测到的碱基数，GC碱基数，测序总深度。
+
+#### 然后走seqCNA流程
+
+```R
+library(seqCNA) 
+a=read.table('wgs/GC_stat.10k.txt',fill = T)
+a=na.omit(a)
+a$GC = a[,4]/a[,3]
+a$depth = a[,5]/a[,3]
+a = a[a$depth<100,]
+plot(a$GC,a$depth)
+
+a=a[,c(1,2,6,5)]
+colnames(a)=c('chrom','win.start','reads.gc','counts')
+a$counts=floor(a$counts/150)
+a$reads.mapq=30
+library(seqCNA)  
+head(a)
+dim(a)
+tail(a)
+
+a$win.start=a$win.start*10000
+a=a[a$chrom %in% paste0('chr',c(1:22,'X','Y')),]
+a=a[a$win.start>0,]
+a=a[a$counts>0,]
+a=a[a$reads.gc>0,]
+a=a[,c(1:3,5,4)]
+
+## 200Kb windows to calculate the GC content and counts.
+rco = readSeqsumm(tumour.data=a) 
+rco = applyFilters(rco, trim.filter=1, mapq.filter=2)
+rco = runSeqnorm(rco) 
+rco = runGLAD(rco) 
+plotCNProfile(rco) 
+rco = applyThresholds(rco, seq(-0.8,4,by=0.8), 1)
+plotCNProfile(rco)
+summary(rco) 
+head(rco@output)
+writeCNProfile(rco,'./')
+```
+
+#### 分析结果汇总信息：
+
+```
+Basic information:
+  SeqCNAInfo object with 306397 10Kbp-long windows.
+  PEM information is not available.
+  Paired normal is not available.
+  Genome and build unknown (chromosomes chr1 to chrY).
+Total filtered windows: 23717.
+The profile is normalized and segmented.
+Copy numbers called from 1 to 8.
+  CN1:34924 windows.
+  CN2:95226 windows.
+  CN3:116829 windows.
+  CN4:35047 windows.
+  CN5:554 windows.
+  CN6:100 windows.
+  CN7:0 windows.
+  CN8:0 windows.
+```
+
+
+
+#### 单个样本的CNV结果如图
+
+![](http://www.bio-info-trainee.com/wp-content/uploads/2017/10/10kb-seqCNA-figure1.png)
+
+
+
+
+
+![](http://www.bio-info-trainee.com/wp-content/uploads/2017/10/10kb-seqCNA-figure2.png)
+
+
+
+![](http://www.bio-info-trainee.com/wp-content/uploads/2017/10/10kb-seqCNA-figure3.png)
 
 
 
@@ -102,6 +195,13 @@ panel.grid = element_blank(),
 )
 print(p)
 ```
+
+可以很明显看到GC含量和测序深度是高度相关的
+
+![GC含量和测序深度](http://www.bio-info-trainee.com/wp-content/uploads/2017/10/GC-content-depth.png)
+
+
+
 
 ## varscan解决肿瘤N-T配对拷贝数变异检测
 
@@ -435,5 +535,6 @@ Black bar: If using the "plotcalls" command, this bar will indicate extent of ca
 
 因为暂时用不到，就不写教程了，反正学个软件，就是看readme罢了，想要用的好，就得把readme仔细读下去，并且看发表的文章。
 
+我应该会更新一个CNVkit的使用说明。
 
 

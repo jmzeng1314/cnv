@@ -1,4 +1,4 @@
- library(seqCNA) 
+library(seqCNA) 
 data(seqsumm_HCC1143) 
 head(seqsumm_HCC1143)
 dim(seqsumm_HCC1143)
