@@ -1,0 +1,125 @@
+---
+title: "GAAD.R"
+author: "jmzeng1314"
+date: "10/27/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+require(GLAD) 
+data(snijders)
+head(gm13330)
+tail(gm13330)
+gm13330=gm13330[,c(1,2,3,4)]
+table(gm13330$Chromosome)
+profileCGH <- as.profileCGH(gm13330)
+res <- glad(profileCGH, mediancenter=FALSE,
+            smoothfunc="lawsglad", bandwidth=10, round=1.5,
+            model="Gaussian", lkern="Exponential", qlambda=0.999,
+            base=FALSE,
+            lambdabreak=8, lambdacluster=8, lambdaclusterGen=40,
+            type="tricubic", param=c(d=6),
+            alpha=0.001, msize=2,
+            method="centroid", nmax=8,
+            verbose=FALSE)
+data(cytoband)
+head(cytoband)
+tail(cytoband)
+plotProfile(res, unit=3, Bkp=TRUE, labels=FALSE, plotband=FALSE, Smoothing="Smoothing", cytoband = cytoband)
+plotProfile(res, unit=3, Bkp=TRUE, labels=FALSE, plotband=FALSE, Smoothing="Smoothing", cytoband = cytoband,Chromosome = 1)
+plotProfile(res, unit=3, Bkp=TRUE, labels=FALSE, plotband=FALSE, Smoothing="Smoothing", cytoband = cytoband,Chromosome = 4)
+
+```
+
+```{r}
+data(veltman)
+head(P9)
+tail(P9)
+dim(P9)
+profileCGH <- as.profileCGH(P9)
+
+profileCGH <- daglad(profileCGH, mediancenter=FALSE, normalrefcenter=FALSE, genomestep=FALSE,
+                     smoothfunc="lawsglad", lkern="Exponential", model="Gaussian",
+                     qlambda=0.999,  bandwidth=10, base=FALSE, round=1.5,
+                     lambdabreak=8, lambdaclusterGen=40, param=c(d=6), alpha=0.001, msize=2,
+                     method="centroid", nmin=1, nmax=8,
+                     amplicon=1, deletion=-5, deltaN=0.2,  forceGL=c(-0.3,0.3), nbsigma=3,
+                     MinBkpWeight=0.35, CheckBkpPos=TRUE)
+
+plotProfile(profileCGH, Smoothing="Smoothing", Bkp=TRUE, plotband=FALSE, cytoband = cytoband)
+abline(h=c(-0.3,-0.2,0.2,0.3),col=c("green","black","black","red"))
+axis(2,at=c(-0.3,-0.2,0.2,0.3), labels=c("forceGL[1]","-deltaN","+deltaN","forceGL[2]"), las=2)
+
+```
+
+
+```{r}
+data(veltman)
+
+profileCGH <- as.profileCGH(P9)
+
+profileCGH <- daglad(profileCGH, mediancenter=FALSE, normalrefcenter=FALSE, genomestep=FALSE,
+                     smoothfunc="lawsglad", lkern="Exponential", model="Gaussian",
+                     qlambda=0.999,  bandwidth=10, base=FALSE, round=1.5,
+                     lambdabreak=8, lambdaclusterGen=40, param=c(d=6), alpha=0.001, msize=2,
+                     method="centroid", nmin=1, nmax=8,
+                     amplicon=1, deletion=-5, deltaN=0.10,  forceGL=c(-0.15,0.15), nbsigma=3,
+                     MinBkpWeight=0.35, CheckBkpPos=TRUE)
+
+
+plotProfile(profileCGH, Smoothing="Smoothing", Bkp=TRUE, plotband=FALSE, cytoband = cytoband)
+abline(h=c(-0.15,-0.1,0.1,0.15),col=c("green","black","black","red"))
+axis(2,at=c(-0.15,-0.1,0.1,0.15), labels=c("forceGL[1]","-deltaN","+deltaN","forceGL[2]"), las=2)
+
+```
+
+
+
+```{r}
+
+data(arrayCGH) 
+head(array2)
+array <- list(arrayValues=array2, arrayDesign=c(4,4,21,22))
+class(array) <- "arrayCGH"
+
+arrayPlot(array,"Log2Rat", bar="none")
+
+arrayPersp(array,"Log2Rat", box=FALSE, theta=110, phi=40, bar=FALSE)
+
+
+data(snijders)
+
+profileCGH <- as.profileCGH(gm13330)
+
+
+res <- glad(profileCGH, mediancenter=FALSE,
+            smoothfunc="lawsglad", bandwidth=10, round=2,
+            model="Gaussian", lkern="Exponential", qlambda=0.999,
+            base=FALSE,
+            lambdabreak=8, lambdacluster=8, lambdaclusterGen=40,
+            type="tricubic", param=c(d=6),
+            alpha=0.001, msize=2,
+            method="centroid", nmax=8,
+            verbose=FALSE)
+
+
+plotProfile(res, unit=3, Bkp=TRUE, labels=FALSE, Smoothing="Smoothing", plotband=FALSE, cytoband = cytoband)
+
+plotProfile(res, unit=3, Bkp=TRUE, labels=FALSE, Smoothing="Smoothing", cytoband = cytoband)
+
+text <- list(x=c(90000,200000),y=c(0.15,0.3),labels=c("NORMAL","GAIN"), cex=2)
+plotProfile(res, unit=3, Bkp=TRUE, labels=TRUE, Chromosome=1,
+            Smoothing="Smoothing", plotband=FALSE, text=text, cytoband = cytoband)
+
+text <- list(x=c(90000,200000),y=c(0.15,0.3),labels=c("NORMAL","GAIN"), cex=2)
+plotProfile(res, unit=3, Bkp=TRUE, labels=TRUE, Chromosome=1,
+            Smoothing="Smoothing", text=text, main="Chromosome 1", cytoband = cytoband)
+
+
+```
+
