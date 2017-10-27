@@ -260,7 +260,180 @@ save.image(file = 'DNAcopy_T3.Rdata')
 We recently [published](http://www.ncbi.nlm.nih.gov/pubmed/20031968) Correlation Matrix Diagonal Segmentation ([CMDS](https://sourceforge.net/projects/cmds/)) to search for RCNAs using SNP array-based copy number data, and this program can be applied to exome-based copy number data as well. 
 
 
+## 多个肿瘤样本用conifer软件来找拷贝数变异
 
+conifer全称是COpy Number Inference From Exome Reads，发表于2012，目前(2017)已有近300的引用啦。软件本身下载即可使用，但是依赖一下python的包，比如 [NumPy](http://numpy.scipy.org/) and [PyTables](http://www.pytables.org/) packages，还有[pysam](http://code.google.com/p/pysam/) 和[matplotlib](http://matplotlib.sourceforge.net/). 
+
+```shell
+cd ~/biosoft
+# http://conifer.sourceforge.net/download.html
+mkdir conifer &&  cd conifer 
+wget https://downloads.sourceforge.net/project/conifer/CoNIFER%200.2.2/conifer_v0.2.2.tar.gz 
+tar zxvf conifer_v0.2.2.tar.gz  
+mkdir test && cd test 
+wget http://sourceforge.net/projects/conifer/files/sampledata.tar.gz
+tar zxvf sampledata.tar.gz
+wget http://sourceforge.net/projects/conifer/files/probes.txt 
+
+python -c "import numpy"
+python -c "import tables"
+# pip install pysam --user
+python -c "import pysam"
+python -c "import matplotlib"
+```
+
+因为这个软件就是设计给`WES测序数据`的，所以需要自行制作`外显子的坐标`记录文件，或者直接下载This file defines the chr:start-stop coordinates for the probes/targets in the exome capture。You can download the standard probe file used in Krumm et al. [here](http://sourceforge.net/projects/conifer/files/probes.txt/download). 软件有详细的使用教程：http://conifer.sourceforge.net/tutorial.html
+
+### 首先把所有样本的bam文件转为RPKM表达量文件
+
+```
+ python conifer.py rpkm \
+	--probes probes.txt \
+	--input sample.bam \
+	--output RPKM/sample.rpkm.txt
+```
+
+**这个程序也是槽点满满，**软件本身只提供了hg19版本的probes.txt文件，反正我各种自己制作都不符合要求，最后得到的每个外显子的RPKM都是几个亿，完全是一脸蒙圈。后来我干脆自己计算RPKM啦，代码如下：
+
+```shell
+bed=exon_probe.hg38.gene.bed
+for bam in  *bam
+do
+file=$(basename $bam )
+sample=${file%%.*} 
+echo $sample
+#export total_reads=$(samtools view -F 0x4 $bam | cut -f 1 | sort | uniq | wc -l) 
+export total_reads=$(samtools idxstats  $bam|awk -F '\t' '{s+=$3}END{print s}') 
+echo The number of reads is $total_reads 
+bedtools multicov -bams  $bam -bed $bed |perl -alne '{$len=$F[2]-$F[1];if($len <1 ){print "$.\t$F[4]\t0" }else{$rpkm=(1000000000*$F[4]/($len* $ENV{total_reads}));print "$.\t$F[4]\t$rpkm"}}' >$sample.rpkm.txt
+done 
+```
+
+上面那个exon_probe.hg38.gene.bed文件我是下载了CCDS文件制作的。
+
+```Shell
+wget ftp://ftp.ncbi.nlm.nih.gov/pub/CCDS/current_human/CCDS.20160908.txt
+cat CCDS.20160908.txt |perl -alne '{/\[(.*?)\]/;next unless $1;$gene=$F[2];$exons=$1;$exons=~s/\s//g;$exons=~s/-/\t/g;print "$F[0]\t$_\t$gene" foreach split/,/,$exons;}'|sort -u |bedtools sort -i > exon_probe.grch38.gene.bed
+sed 's/^/chr/g' exon_probe.grch38.gene.bed >exon_probe.hg38.gene.bed
+```
+
+不过作者给了测试就，是The sample data set of 26 RPKM files. [Sample RPKM Files](http://sourceforge.net/projects/conifer/files/sampledata.tar.gz/download)
+
+| Study        | Exome Capture       | N    | Samples                                  |
+| ------------ | ------------------- | ---- | ---------------------------------------- |
+| HapMap       | Nimblegen V1 (2009) | 8    | NA12878, NA15510, NA18507, NA18517, NA18555, NA18956, NA19129, NA19240 |
+| Autism Trios | Nimblegen V2 (2010) | 18   | 6 Trios (Mother, Father, Proband)        |
+
+这里就用这个测试数据来说明这个软件的用法吧，**很明显，需要多个样本一起运行。**
+
+中间报错了，日志如下：
+
+```
+File "conifer.py", line 682, in <module>
+args.func(args)
+File "conifer.py", line 564, in CF_bam2RPKM
+if not f._hasIndex():
+```
+
+简单谷歌了一下，发现了解决方案，需要修改那个**conifer.py** 程序，这么大一个bug作者居然不去修复，真奇怪。解决方案如下:
+
+```
+It's a very simple fix. Just change line 564 of conifer.py from:
+if not f._hasIndex():
+to
+if not f.has_index():
+Then it should work.
+```
+
+### 运行主程序
+
+代码不复杂，就是WES的探针文件，加上转换好的RPKM文件即可。
+
+```Shell
+ cd ~/biosoft/conifer/test/
+ python ~/biosoft/conifer/conifer_v0.2.2/conifer.py analyze \
+  	--probes ~/biosoft/conifer/test/probes.txt \
+  	--rpkm_dir ~/biosoft/conifer/test/sampledata/RPKM_data/  \
+  	--output analysis.hdf5 \
+  	--svd 6 \
+  	--write_svals singular_values.txt \
+  	--plot_scree screeplot.png \
+  	--write_sd sd_values.txt
+```
+
+### call CNV
+
+```Shell
+ cd ~/biosoft/conifer/test/
+ python ~/biosoft/conifer/conifer_v0.2.2/conifer.py call \
+  	--input analysis.hdf5 \
+  	--output calls.txt
+```
+
+这里得到的calls.txt就是我们对这个WES项目的CNV分析结果啦
+
+```shell
+$ head calls.txt
+sampleID	chromosome	start	stop	state
+Trio2.fa	chr1	196714946	196759357	del
+NA18555	chr1	161483684	161640062	dup
+NA15510	chr1	155226464	155261728	dup
+Trio3.mo	chr1	149398798	149760173	del
+NA19240	chr1	110224430	110254970	dup
+Trio3.fa	chr10	46998880	47894049	dup
+Trio3.fa	chr10	47948713	48382260	dup
+Trio4.fa	chr10	124362280	124370763	dup
+NA18956	chr10	124342115	124352111	del
+```
+
+### 可视化
+
+```Shell
+ cd ~/biosoft/conifer/test/
+ mkdir export_svdzrpkm/
+ python ~/biosoft/conifer/conifer_v0.2.2/conifer.py export \
+  	--input analysis.hdf5 \
+  	--output ./export_svdzrpkm/
+## 需要自定义区域进行可视化
+cd ~/biosoft/conifer/test/ 
+python ~/biosoft/conifer/conifer_v0.2.2/conifer.py   plot \
+  	--input analysis.hdf5 \
+  	--region chr#:start-stop \
+  	--output image.png \
+  	--sample sampleID
+ ## 也可以一次性画出所有的图
+cd ~/biosoft/conifer/test/
+ mkdir call_imgs/
+ python ~/biosoft/conifer/conifer_v0.2.2/conifer.py  plotcalls \
+  	--input analysis.hdf5 
+  	--calls calls.txt 
+  	--outputdir ./call_imgs/
+```
+
+### figure解析
+
+![conifer可视化](http://conifer.sourceforge.net/images/chr16_21426277_21747711_NA18517.png)
+
+**Legend/Explanation:**
+X-axis: Exons/probes from the probes.txt file
+Y-axis: SVD-ZRPKM values for each exon.
+Red bars and line: SVD-ZRPKM values for each exon from the sample with the call (or highlighted sample). The smooth continuous line is simply a gaussian-smoothed representation of the SVD-ZRPKM values at each exon.
+Thin black in background: All other samples in the analysis (for comparison and simultaneous visualization purposes)
+Purple bars: Genes from the probes.txt file
+Black bar: If using the "plotcalls" command, this bar will indicate extent of call above threshold (--threshold) value.
+
+
+## 其它软件
+
+目前主流检测全基因组水平拷贝数变异（CNV）的平台主要是基因芯片，但是基因芯片一般来说检测的片段长度至少在10kb以上，另外对于特定区域的拷贝数，如DMD等，还可以使用MLPA平台，对于全外显子来说，其本身设计是用来检测点突变与indel的，由于实验与基因数据分析技术的局限，全外显子CNV分析有很高的假阳性，所以常规流程中并不包括全外显子CNV分析，可是在实际的科研与临床工作中，在排除了点突变与indel之后仍然找不到有意义的变异之后，分析CNV成为最后的希望。
+
+基因检测与解读公众号的游侠推荐过相对比较靠谱的两款分析软件：**XHMM与CODEX。**
+
+- XHMM(exome hidden Markov model)软件由美国纽约西奈山医学院的Fromer等开发，发表于2012年10月的Am J Hum Genet杂志（PMID：23040492），XHMM的主要原理是：通过GATK的Depth of Coverage工具计算每个外显子的测序深度，然后PCA将不同样本的深度进行归一化，去除高变异的背景噪声，HMM算法训练数据分析哪些属于高深度区域，哪些属于低深度区域，最后拷贝数分析并得出基因型。
+
+- CODEX软件由宾夕法尼亚大学的Jiang Y等开发，发表于2015年3月的Nucleic Acids Res（PMID: 25618849）. CODEX的主要原理是：计算每个外显子的测序深度、比对率及GC含量，归一化每个样本的测序深度，Poisson片段化分析，最后计算每个样本的CNV。
+
+因为暂时用不到，就不写教程了，反正学个软件，就是看readme罢了，想要用的好，就得把readme仔细读下去，并且看发表的文章。
 
 
 
