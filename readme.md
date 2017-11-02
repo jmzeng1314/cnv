@@ -12,6 +12,11 @@
 - [PDF](https://bioconductor.org/packages/release/bioc/vignettes/seqCNA/inst/doc/seqCNA.pdf) 
 - [R Script](https://bioconductor.org/packages/release/bioc/vignettes/seqCNA/inst/doc/seqCNA.R)  
 
+作者在[文献](https://bmcgenomics.biomedcentral.com/articles/10.1186/1471-2164-15-178)中自述有两点方法学上的创新：
+
+- **Window filtering** - reducing *false positives* in comparison to assessed existing methods
+- **GC content correction** - improving *copy number profile quality*, especially under *great read coverage* and *high correlation between GC content and copy number*.
+
 读其文档的时候发现，是可以针对单个样本进行拷贝数变异分析的，代码如下：
 
 ```R
@@ -35,7 +40,7 @@ writeCNProfile(rco,'./')
 
 虽然其**算法比较复杂**，但是用法很简单，对input的数据进行了**多步骤处理**，而且其input数据本身是比较简单的，如下：
 
-```
+```R
 > head(seqsumm_HCC1143)
   chrom win.start reads.gc reads.mapq counts
 1  chr1     0e+00    0.551      1.691   1199
