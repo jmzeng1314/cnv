@@ -68,12 +68,12 @@ GENOME='/home/jianmingzeng/reference/genome/human_g1k_v37/human_g1k_v37.fasta'
 bam='ESCC13-T1_recal.bam'
 samtools mpileup -f $GENOME $bam |\
 perl -alne '{$pos=int($F[1]/200000); $key="$F[0]\t$pos";$GC{$key}++ if $F[2]=~/[GC]/;$counts_sum{$key}+=$F[3];$number{$key}++;}END{print "$_\t$number{$_}\t$GC{$_}\t$counts_sum{$_}" foreach keys %number}' |\
-sort -k1,1 -k 2,2n >T1.windows
+sort -k1,1 -k 2,2n > T1.windows
 ```
 
 得到的结果如下：
 
-```
+```shell
 head GC_stat.10k.txt
 chr1	1	7936	3885	582219
 chr1	2	2123	934	88167
@@ -87,7 +87,7 @@ chr1	9	9077	2421	247285
 chr1	10	9415	1661	371830
 ```
 
-前面两行是窗口的坐标，**第几号染色体的第几个窗口**，后面3行是数据，分别是每个窗口的测到的碱基数，GC碱基数，测序总深度。
+前面两行是窗口的坐标，**第几号染色体的第几个窗口**，后面3行是数据，分别是每个窗口的测到的**碱基数**，**GC碱基数**，**测序总深度**。
 
 #### 然后走seqCNA流程
 
@@ -170,7 +170,7 @@ Copy numbers called from 1 to 8.
 
 #### 为什么要计算GC含量呢
 
-这个是二代测序本身的技术限制，很容易探究到测序深度和GC含量是显著相关的，代码如下：
+这个是二代测序本身的技术限制，很容易探究到**测序深度和GC含量是显著相关**的，代码如下：
 
 ```R
 a=read.table('T1.windows')
